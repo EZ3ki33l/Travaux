@@ -16,6 +16,7 @@ interface Product {
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -25,36 +26,58 @@ export default function ProductsPage() {
     try {
       const response = await fetch("/api/get-products");
       const data = await response.json();
+      
+      console.log("API Response:", data);
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
+      if (!Array.isArray(data)) {
+        console.error("Invalid data format:", data);
+        throw new Error("Les données reçues ne sont pas au bon format");
+      }
+
       setProducts(data);
     } catch (error) {
       console.error("Error fetching products:", error);
-      toast.error("Erreur lors de la récupération des produits");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la récupération des produits");
+      setProducts([]); // Réinitialiser à un tableau vide en cas d'erreur
     }
   };
 
   const handleDelete = async (id: number) => {
+    console.log("Deleting product:", id);
     setDeleteId(id);
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
+    setIsLoading(true);
 
     try {
+      console.log("Sending delete request for product:", deleteId);
       const response = await fetch(`/api/delete-product?id=${deleteId}`, {
         method: "DELETE",
       });
 
+      const data = await response.json();
+      console.log("Delete response:", data);
+
       if (response.ok) {
         toast.success("Produit supprimé avec succès");
-        fetchProducts();
+        await fetchProducts();
       } else {
-        toast.error("Erreur lors de la suppression");
+        console.error("Delete failed:", data);
+        toast.error(data.error || "Erreur lors de la suppression");
       }
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error("Erreur lors de la suppression");
+    } finally {
+      setIsLoading(false);
+      setDeleteId(null);
     }
-    setDeleteId(null);
   };
 
   return (
@@ -77,14 +100,15 @@ export default function ProductsPage() {
                   {product.name}
                 </h2>
                 <p className="text-sm text-[var(--foreground)]">
-                  {product.price}€ - {product.room.name}
+                  {product.price}€ - {product.room?.name || "N/A"}
                 </p>
               </div>
               <button
                 onClick={() => handleDelete(product.id)}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                disabled={isLoading}
               >
-                Supprimer
+                {isLoading ? "..." : "Supprimer"}
               </button>
             </div>
           ))}
@@ -104,14 +128,16 @@ export default function ProductsPage() {
                 <button
                   onClick={() => setDeleteId(null)}
                   className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                  disabled={isLoading}
                 >
                   Annuler
                 </button>
                 <button
                   onClick={confirmDelete}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                  disabled={isLoading}
                 >
-                  Confirmer
+                  {isLoading ? "..." : "Confirmer"}
                 </button>
               </div>
             </div>
