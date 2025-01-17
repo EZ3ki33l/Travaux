@@ -34,7 +34,6 @@ export default function AdminPage() {
     
     // Si c'est Leroy Merlin, traiter différemment
     if (url.includes('leroymerlin')) {
-      toast.error('Le site Leroy Merlin ne permet pas la récupération automatique. Veuillez saisir les informations manuellement.');
       // Extraire et nettoyer le nom du produit de l'URL
       const urlParts = url.split('/');
       const rawName = urlParts[urlParts.length - 1]
@@ -47,6 +46,10 @@ export default function AdminPage() {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitaliser chaque mot
         .join(' ');
       setName(rawName);
+      toast("Veuillez saisir les informations manuellement", {
+        icon: '📝',
+        duration: 4000
+      });
       return;
     }
 
@@ -56,7 +59,7 @@ export default function AdminPage() {
       const response = await fetch(`/api/fetch-product?url=${encodeURIComponent(url)}`);
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && !data.error) {
         const filteredImages = (data.images || []).filter(
           (img: string) => img && (img.startsWith("http") || img.startsWith("data:image"))
         );
@@ -66,12 +69,30 @@ export default function AdminPage() {
         setName(data.name || "");
         toast.success("Données récupérées avec succès");
       } else {
-        console.error("Erreur:", data.error);
-        toast.error(data.error || "Erreur lors de la récupération des données");
+        // Extraire le nom du produit de l'URL comme pour Leroy Merlin
+        const urlParts = url.split('/');
+        const rawName = urlParts[urlParts.length - 1]
+          .split('#')[0]
+          .replace(/-/g, ' ')
+          .replace(/\d+\.html$/, '')
+          .replace(/\d+$/, '')
+          .trim()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+        setName(rawName);
+        
+        toast("Veuillez saisir les informations manuellement", {
+          icon: '📝',
+          duration: 4000
+        });
       }
     } catch (error) {
       console.error("Erreur lors de la récupération des données:", error);
-      toast.error("Erreur lors de la récupération des données");
+      toast("Veuillez saisir les informations manuellement", {
+        icon: '📝',
+        duration: 4000
+      });
     } finally {
       setIsLoading(false);
     }
