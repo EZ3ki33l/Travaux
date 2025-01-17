@@ -40,7 +40,7 @@ export default function ProductsPage() {
     if (!deleteId) return;
 
     try {
-      const response = await fetch(`/api/products/${deleteId}`, {
+      const response = await fetch(`/api/delete-product?id=${deleteId}`, {
         method: "DELETE",
       });
 
