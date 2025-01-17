@@ -49,10 +49,23 @@ const scrapeWithFetch = async (url: string) => {
   const response = await fetch(url);
   const html = await response.text();
   
-  // Extraction basique avec des regex
-  const nameMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/);
-  const name = nameMatch ? nameMatch[1].trim() : '';
+  // Extraction du titre avec plusieurs patterns
+  let name = '';
+  const titlePatterns = [
+    /<h1[^>]*>([^<]+)<\/h1>/,
+    /<title[^>]*>([^|<]+)(?:\||<)/,
+    /<meta[^>]+og:title[^>]+content="([^"]+)"/
+  ];
+  
+  for (const pattern of titlePatterns) {
+    const match = html.match(pattern);
+    if (match && match[1].trim()) {
+      name = match[1].trim();
+      break;
+    }
+  }
 
+  // Images
   const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/g;
   const images = [];
   let match;
@@ -62,19 +75,49 @@ const scrapeWithFetch = async (url: string) => {
     }
   }
 
-  // Amélioration de l'extraction du prix
-  const priceRegex = /[€]?\s*(\d+(?:[.,]\d{2})?)\s*€/;
-  const priceMatch = html.match(priceRegex);
-  const price = priceMatch ? priceMatch[1].replace(',', '.') : null;
+  // Prix avec plusieurs patterns
+  let price = null;
+  const pricePatterns = [
+    /[€]?\s*(\d+(?:[.,]\d{2})?)\s*€/,
+    /prix[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</i,
+    /data-price="(\d+(?:[.,]\d{2})?)/
+  ];
 
-  // Décodage du HTML dans la description
-  const descMatch = html.match(/<meta[^>]+description[^>]+content="([^"]+)"/);
-  const description = descMatch 
-    ? decodeHTMLEntities(descMatch[1])
-    : null;
+  for (const pattern of pricePatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      price = match[1].replace(',', '.');
+      break;
+    }
+  }
+
+  // Description avec nettoyage complet du HTML
+  const descriptionPatterns = [
+    /<meta[^>]+description[^>]+content="([^"]+)"/,
+    /<div[^>]+description[^>]*>([^]*?)<\/div>/,
+    /<p[^>]+description[^>]*>([^]*?)<\/p>/
+  ];
+
+  let description = null;
+  for (const pattern of descriptionPatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      // Nettoie le HTML et décode les entités
+      description = cleanHTML(decodeHTMLEntities(match[1]));
+      break;
+    }
+  }
 
   return { name, images: [...new Set(images)], price, description };
 };
+
+// Fonction pour nettoyer le HTML
+function cleanHTML(text: string) {
+  return text
+    .replace(/<[^>]+>/g, '') // Supprime les balises HTML
+    .replace(/\s+/g, ' ')    // Normalise les espaces
+    .trim();
+}
 
 // Fonction pour décoder les entités HTML
 function decodeHTMLEntities(text: string) {
@@ -85,11 +128,16 @@ function decodeHTMLEntities(text: string) {
     '&quot;': '"',
     '&#034;': '"',
     '&#039;': "'",
+    '&eacute;': 'é',
+    '&egrave;': 'è',
+    '&agrave;': 'à',
+    '&ecirc;': 'ê',
+    '&ccedil;': 'ç',
   };
   
-  return text.replace(/&[^;]+;/g, (entity) => {
-    return entities[entity] || entity;
-  });
+  return text
+    .replace(/&[^;]+;/g, (entity) => entities[entity] || '')
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec)));
 }
 
 export async function GET(request: Request) {
