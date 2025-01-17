@@ -13,14 +13,10 @@ export async function GET() {
       }
     });
 
-    if (!Array.isArray(rooms)) {
-      return NextResponse.json({ data: [] });
-    }
-
-    return NextResponse.json(rooms);
+    return NextResponse.json(rooms || []);
   } catch (error) {
     console.error('Error fetching rooms:', error);
-    return NextResponse.json({ data: [] });
+    return NextResponse.json([]);
   } finally {
     await prisma.$disconnect();
   }

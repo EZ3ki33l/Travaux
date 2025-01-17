@@ -8,12 +8,16 @@ interface Room {
   id: number;
   name: string;
   squareMeters?: number;
+  _count?: {
+    products: number;
+  };
 }
 
 export default function RoomsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [squareMeters, setSquareMeters] = useState<string>('');
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchRooms();
@@ -23,10 +27,17 @@ export default function RoomsPage() {
     try {
       const response = await fetch('/api/rooms');
       const data = await response.json();
-      setRooms(data);
+
+      if (Array.isArray(data)) {
+        setRooms(data);
+      } else {
+        console.error('Invalid data format:', data);
+        setRooms([]);
+      }
     } catch (error) {
       console.error('Error fetching rooms:', error);
       toast.error('Erreur lors de la récupération des pièces');
+      setRooms([]);
     }
   };
 
@@ -36,6 +47,7 @@ export default function RoomsPage() {
       return;
     }
 
+    setIsLoading(true);
     try {
       const response = await fetch('/api/rooms/update', {
         method: 'POST',
@@ -54,11 +66,14 @@ export default function RoomsPage() {
         setSquareMeters('');
         setSelectedRoom(null);
       } else {
-        toast.error('Erreur lors de la mise à jour');
+        const error = await response.json();
+        toast.error(error.message || 'Erreur lors de la mise à jour');
       }
     } catch (error) {
       console.error('Error updating square meters:', error);
       toast.error('Erreur lors de la mise à jour');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,6 +90,7 @@ export default function RoomsPage() {
               value={selectedRoom || ''}
               onChange={(e) => setSelectedRoom(Number(e.target.value))}
               className="w-full p-2 rounded border bg-[var(--input-background)] text-[var(--input-text)]"
+              disabled={isLoading}
             >
               <option value="">Sélectionner une pièce</option>
               {rooms.map((room) => (
@@ -91,12 +107,14 @@ export default function RoomsPage() {
                 onChange={(e) => setSquareMeters(e.target.value)}
                 placeholder="Surface en m²"
                 className="flex-1 p-2 rounded border bg-[var(--input-background)] text-[var(--input-text)]"
+                disabled={isLoading}
               />
               <button
                 onClick={handleUpdateSquareMeters}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+                disabled={isLoading}
               >
-                Mettre à jour
+                {isLoading ? '...' : 'Mettre à jour'}
               </button>
             </div>
           </div>
@@ -106,8 +124,15 @@ export default function RoomsPage() {
             <div className="grid gap-4">
               {rooms.map((room) => (
                 <div key={room.id} className="flex justify-between items-center p-4 bg-[var(--background)] rounded border border-[var(--card-border)]">
-                  <span className="text-[var(--foreground)]">{room.name}</span>
-                  <span className="text-[var(--foreground)]">{room.squareMeters ? `${room.squareMeters}m²` : 'Non défini'}</span>
+                  <div>
+                    <span className="text-[var(--foreground)]">{room.name}</span>
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({room._count?.products || 0} articles)
+                    </span>
+                  </div>
+                  <span className="text-[var(--foreground)]">
+                    {room.squareMeters ? `${room.squareMeters}m²` : 'Non défini'}
+                  </span>
                 </div>
               ))}
             </div>
