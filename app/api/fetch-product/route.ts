@@ -71,8 +71,13 @@ const scrapeWithFetch = async (url: string) => {
   const images = [];
   let match;
   while ((match = imgRegex.exec(html)) !== null) {
-    if (!match[1].includes('logo') && !match[1].includes('icon') && !match[1].endsWith('.svg')) {
-      images.push(match[1]);
+    const imgUrl = match[1];
+    // Filtrer les images par taille et type
+    if (!imgUrl.includes('logo') && 
+        !imgUrl.includes('icon') && 
+        !imgUrl.endsWith('.svg') &&
+        imgUrl.match(/\.(jpg|jpeg|png|webp)$/i)) {
+      images.push(imgUrl);
     }
   }
 
@@ -81,7 +86,7 @@ const scrapeWithFetch = async (url: string) => {
   
   // Pattern spécifique pour Brico Dépôt
   if (url.includes('bricodepot')) {
-    const priceMatch = html.match(/data-price="(\d+)"/);
+    const priceMatch = html.match(/(\d+)\s*(?:€|&euro;)\s*00/);
     if (priceMatch) {
       const num = parseInt(priceMatch[1]);
       if (num >= 20 && num < 10000) {
