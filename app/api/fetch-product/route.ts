@@ -62,14 +62,35 @@ const scrapeWithFetch = async (url: string) => {
     }
   }
 
-  const priceMatch = html.match(/(\d+[.,]?\d*)\s*€/);
+  // Amélioration de l'extraction du prix
+  const priceRegex = /[€]?\s*(\d+(?:[.,]\d{2})?)\s*€/;
+  const priceMatch = html.match(priceRegex);
   const price = priceMatch ? priceMatch[1].replace(',', '.') : null;
 
+  // Décodage du HTML dans la description
   const descMatch = html.match(/<meta[^>]+description[^>]+content="([^"]+)"/);
-  const description = descMatch ? descMatch[1] : null;
+  const description = descMatch 
+    ? decodeHTMLEntities(descMatch[1])
+    : null;
 
   return { name, images: [...new Set(images)], price, description };
 };
+
+// Fonction pour décoder les entités HTML
+function decodeHTMLEntities(text: string) {
+  const entities: { [key: string]: string } = {
+    '&lt;': '<',
+    '&gt;': '>',
+    '&amp;': '&',
+    '&quot;': '"',
+    '&#034;': '"',
+    '&#039;': "'",
+  };
+  
+  return text.replace(/&[^;]+;/g, (entity) => {
+    return entities[entity] || entity;
+  });
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
