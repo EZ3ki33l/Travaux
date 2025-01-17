@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import Link from 'next/link';
 import AdminNav from '../components/AdminNav';
+import { useRouter } from "next/navigation";
 
 interface Room {
   id: number;

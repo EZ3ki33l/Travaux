@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
 import AdminNav from "../components/AdminNav";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function AdminPage() {
   const [url, setUrl] = useState<string>("");
@@ -88,7 +89,7 @@ export default function AdminPage() {
   const handleSaveProduct = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/save-product', {
+      const response = await fetch('/api/products', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +106,8 @@ export default function AdminPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save product');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save product');
       }
 
       // Revalidate pages
@@ -118,6 +120,7 @@ export default function AdminPage() {
       router.push('/admin');
     } catch (error) {
       console.error('Error saving product:', error);
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement du produit');
       setIsLoading(false);
     }
   };
@@ -314,9 +317,11 @@ export default function AdminPage() {
                 key={`${renderKey}-${index}`}
                 className="relative text-center"
               >
-                <img
+                <Image
                   src={img}
                   alt={`Product image ${index}`}
+                  width={100}
+                  height={100}
                   className="w-full h-auto rounded-lg"
                 />
                 <div className="flex justify-between items-center mt-1">
