@@ -79,12 +79,12 @@ const scrapeWithFetch = async (url: string) => {
   // Prix avec plusieurs patterns
   let price = null;
   const pricePatterns = [
-    /data-testid="product-price"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
-    /class="[^"]*current-price[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
-    /class="[^"]*price-value[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
+    /data-price-value="(\d+(?:[.,]\d{2})?)"/,
+    /class="[^"]*price-value[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
+    /class="[^"]*current-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
+    /data-testid="product-price"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
     /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/,
-    /class="[^"]*product-price[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
-    /data-price="(\d+(?:[.,]\d{2})?)"[^>]*>/
+    /class="[^"]*product-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i
   ];
 
   for (const pattern of pricePatterns) {
@@ -92,11 +92,21 @@ const scrapeWithFetch = async (url: string) => {
     if (match) {
       const rawPrice = match[1].replace(/[^\d.,]/g, '');
       price = rawPrice.replace(',', '.');
-      // Vérifie que le prix est dans une plage raisonnable (évite les grands nombres comme le capital)
+      // Vérifie que le prix est dans une plage raisonnable
       const numPrice = parseFloat(price);
       if (numPrice > 0 && numPrice < 10000) {
         break;
       }
+      price = null; // Réinitialise le prix si hors plage
+    }
+  }
+
+  // Si aucun prix trouvé, essayer une recherche plus large
+  if (!price) {
+    const fullHtml = html.replace(/\s+/g, ' ');
+    const priceMatch = fullHtml.match(/(\d+)[€\s]+00/);
+    if (priceMatch) {
+      price = priceMatch[1];
     }
   }
 
