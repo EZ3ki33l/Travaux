@@ -81,14 +81,21 @@ const scrapeWithFetch = async (url: string) => {
   const cleanHtml = html.replace(/\s+/g, ' ');
   
   // Pattern spécifique pour Brico Dépôt
-  const bricoMatch = cleanHtml.match(/(\d+)\s*(?:€|&euro;)\s*00\b/);
-  if (bricoMatch && bricoMatch[1]) {
-    const numPrice = parseInt(bricoMatch[1]);
-    if (numPrice > 0 && numPrice < 10000) {
-      price = numPrice.toString();
+  if (url.includes('bricodepot')) {
+    // Recherche du prix dans le HTML nettoyé
+    const matches = cleanHtml.match(/(\d+)\s*(?:€|&euro;|EUR)\s*00/g) || [];
+    for (const match of matches) {
+      const numStr = match.replace(/[^0-9]/g, '');
+      const num = parseInt(numStr);
+      // On prend le premier prix qui semble raisonnable
+      if (num > 50 && num < 10000) {
+        price = num.toString();
+        break;
+      }
     }
   }
 
+  // Si pas de prix trouvé, essayer les patterns génériques
   if (!price) {
     const pricePatterns = [
       /data-price-value="(\d+(?:[.,]\d{2})?)"/,
