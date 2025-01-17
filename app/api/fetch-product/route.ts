@@ -53,14 +53,15 @@ const scrapeWithFetch = async (url: string) => {
   let name = '';
   const titlePatterns = [
     /<h1[^>]*>([^<]+)<\/h1>/,
-    /<title[^>]*>([^|<]+)(?:\||<)/,
-    /<meta[^>]+og:title[^>]+content="([^"]+)"/
+    /<title[^>]*>([^|<-]+)(?:\||<|-)/,
+    /<meta[^>]+og:title[^>]+content="([^"]+)"/,
+    /<meta[^>]+name="title"[^>]+content="([^"]+)"/
   ];
   
   for (const pattern of titlePatterns) {
     const match = html.match(pattern);
     if (match && match[1].trim()) {
-      name = match[1].trim();
+      name = decodeHTMLEntities(match[1].trim());
       break;
     }
   }
@@ -78,16 +79,24 @@ const scrapeWithFetch = async (url: string) => {
   // Prix avec plusieurs patterns
   let price = null;
   const pricePatterns = [
-    /[€]?\s*(\d+(?:[.,]\d{2})?)\s*€/,
-    /prix[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</i,
-    /data-price="(\d+(?:[.,]\d{2})?)/
+    /data-testid="product-price"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
+    /class="[^"]*current-price[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
+    /class="[^"]*price-value[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
+    /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/,
+    /class="[^"]*product-price[^"]*"[^>]*>([^<]*\d+(?:[.,]\d{2})?)[^<]*</,
+    /data-price="(\d+(?:[.,]\d{2})?)"[^>]*>/
   ];
 
   for (const pattern of pricePatterns) {
     const match = html.match(pattern);
     if (match) {
-      price = match[1].replace(',', '.');
-      break;
+      const rawPrice = match[1].replace(/[^\d.,]/g, '');
+      price = rawPrice.replace(',', '.');
+      // Vérifie que le prix est dans une plage raisonnable (évite les grands nombres comme le capital)
+      const numPrice = parseFloat(price);
+      if (numPrice > 0 && numPrice < 10000) {
+        break;
+      }
     }
   }
 
@@ -108,7 +117,12 @@ const scrapeWithFetch = async (url: string) => {
     }
   }
 
-  return { name, images: [...new Set(images)], price, description };
+  return { 
+    name, 
+    images: [...new Set(images)], 
+    price: price ? parseFloat(price).toFixed(2) : null, 
+    description 
+  };
 };
 
 // Fonction pour nettoyer le HTML
