@@ -1,0 +1,31 @@
+// prisma/schema.prisma
+datasource db {
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
+  // uncomment next line if you use Prisma <5.10
+  // directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  name      String
+  url       String
+  images    String[] @db.Text
+  price     Float?
+  description String?  @db.Text
+  room      Room?    @relation(fields: [roomId], references: [id])
+  roomId    Int?
+  createdAt DateTime @default(now())
+  priceType String?
+}
+
+model Room {
+  id            Int       @id @default(autoincrement())
+  name          String
+  squareMeters  Float?
+  products      Product[]
+} 
