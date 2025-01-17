@@ -1,14 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+interface RouteContext {
+  params: {
+    id: string;
+  };
+}
+
 export async function DELETE(
-  request: NextRequest,
-  context: { params: { id: string } }
-) {
+  _: Request,
+  { params }: RouteContext
+): Promise<NextResponse> {
   try {
-    const id = parseInt(context.params.id);
+    const id = parseInt(params.id);
     await prisma.product.delete({
       where: { id },
     });
