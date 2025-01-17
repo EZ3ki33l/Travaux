@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
 import AdminNav from "../components/AdminNav";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 export default function AdminPage() {
   const [url, setUrl] = useState<string>("");
@@ -317,11 +316,9 @@ export default function AdminPage() {
                 key={`${renderKey}-${index}`}
                 className="relative text-center"
               >
-                <Image
+                <img
                   src={img}
                   alt={`Product image ${index}`}
-                  width={100}
-                  height={100}
                   className="w-full h-auto rounded-lg"
                 />
                 <div className="flex justify-between items-center mt-1">
