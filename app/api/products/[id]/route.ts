@@ -3,18 +3,12 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-type Props = {
-  params: {
-    id: string;
-  };
-};
-
 export async function DELETE(
-  _request: NextRequest,
-  { params }: Props
+  request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const id = parseInt(params.id);
+    const id = parseInt(context.params.id);
     await prisma.product.delete({
       where: { id },
     });
