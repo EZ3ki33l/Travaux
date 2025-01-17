@@ -291,7 +291,7 @@ export default function AdminPage() {
           <div className="flex gap-2 mb-4">
             <input
               type="text"
-              placeholder="URL de l'image à ajouter"
+              placeholder="URL de l&apos;image à ajouter"
               value={manualImageUrl}
               onChange={(e) => setManualImageUrl(e.target.value)}
               className="flex-1 p-2 rounded-lg bg-[var(--input-background)] text-[var(--input-text)] border border-[var(--input-border)]"
