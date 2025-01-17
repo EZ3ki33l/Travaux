@@ -78,35 +78,36 @@ const scrapeWithFetch = async (url: string) => {
 
   // Prix avec plusieurs patterns
   let price = null;
-  const pricePatterns = [
-    /data-price-value="(\d+(?:[.,]\d{2})?)"/,
-    /class="[^"]*price-value[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
-    /class="[^"]*current-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
-    /data-testid="product-price"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
-    /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/,
-    /class="[^"]*product-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i
-  ];
-
-  for (const pattern of pricePatterns) {
-    const match = html.match(pattern);
-    if (match) {
-      const rawPrice = match[1].replace(/[^\d.,]/g, '');
-      price = rawPrice.replace(',', '.');
-      // Vérifie que le prix est dans une plage raisonnable
-      const numPrice = parseFloat(price);
-      if (numPrice > 0 && numPrice < 10000) {
-        break;
-      }
-      price = null; // Réinitialise le prix si hors plage
+  const cleanHtml = html.replace(/\s+/g, ' ');
+  
+  // Pattern spécifique pour Brico Dépôt
+  const bricoMatch = cleanHtml.match(/(\d+)\s*(?:€|&euro;)\s*00\b/);
+  if (bricoMatch && bricoMatch[1]) {
+    const numPrice = parseInt(bricoMatch[1]);
+    if (numPrice > 0 && numPrice < 10000) {
+      price = numPrice.toString();
     }
   }
 
-  // Si aucun prix trouvé, essayer une recherche plus large
   if (!price) {
-    const fullHtml = html.replace(/\s+/g, ' ');
-    const priceMatch = fullHtml.match(/(\d+)[€\s]+00/);
-    if (priceMatch) {
-      price = priceMatch[1];
+    const pricePatterns = [
+      /data-price-value="(\d+(?:[.,]\d{2})?)"/,
+      /class="[^"]*price-value[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
+      /class="[^"]*current-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
+      /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/
+    ];
+
+    for (const pattern of pricePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        const rawPrice = match[1].replace(/[^\d.,]/g, '');
+        const tempPrice = rawPrice.replace(',', '.');
+        const numPrice = parseFloat(tempPrice);
+        if (numPrice > 0 && numPrice < 10000) {
+          price = tempPrice;
+          break;
+        }
+      }
     }
   }
 
