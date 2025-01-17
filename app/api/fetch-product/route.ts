@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import chromium from 'chrome-aws-lambda';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -9,18 +9,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   }
 
+  let browser = null;
+
   try {
     console.log(`Fetching data from URL: ${url}`);
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    
+    browser = await chromium.puppeteer.launch({
+      args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: true
     });
+
     const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
-    // Configurer les en-têtes HTTP pour imiter un navigateur réel
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3');
-
-    await page.goto(url, { waitUntil: 'networkidle2' });
+    await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
 
     // Récupérer le nom du produit
     const productName = await page.evaluate(() => {
@@ -35,12 +39,9 @@ export async function GET(request: Request) {
       
       Array.from(document.querySelectorAll('img'))
         .filter(img => {
-          // Récupérer les dimensions de l'image
           const width = img.naturalWidth || img.width;
           const height = img.naturalHeight || img.height;
-          
-          // Filtrer les images trop petites (miniatures/logos)
-          const minSize = 200; // Taille minimale en pixels
+          const minSize = 200;
           
           return (
             width >= minSize && 
@@ -100,9 +101,9 @@ export async function GET(request: Request) {
       return null;
     });
 
-    await browser.close();
-
-    console.log(`Images found: ${imageLinks.length}, Price: ${productPrice}, Description: ${productDescription}`);
+    if (browser) {
+      await browser.close();
+    }
 
     return NextResponse.json({ 
       images: imageLinks, 
@@ -112,6 +113,9 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Error fetching data:', error);
+    if (browser) {
+      await browser.close();
+    }
     return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
   }
 }
