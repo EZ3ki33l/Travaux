@@ -78,23 +78,15 @@ const scrapeWithFetch = async (url: string) => {
 
   // Prix avec plusieurs patterns
   let price = null;
-  const cleanHtml = html.replace(/\s+/g, ' ');
   
   // Pattern spécifique pour Brico Dépôt
   if (url.includes('bricodepot')) {
-    const priceRegex = /(\d+)\s*(?:€|&euro;|EUR)\s*00\b/g;
-    let maxPrice = 0;
-    let match;
-    
-    while ((match = priceRegex.exec(cleanHtml)) !== null) {
-      const num = parseInt(match[1]);
-      if (num >= 20 && num < 10000 && num > maxPrice) {
-        maxPrice = num;
+    const priceMatch = html.match(/data-price="(\d+)"/);
+    if (priceMatch) {
+      const num = parseInt(priceMatch[1]);
+      if (num >= 20 && num < 10000) {
+        price = num.toString();
       }
-    }
-    
-    if (maxPrice > 0) {
-      price = maxPrice.toString();
     }
   }
 
@@ -104,7 +96,8 @@ const scrapeWithFetch = async (url: string) => {
       /data-price-value="(\d+(?:[.,]\d{2})?)"/,
       /class="[^"]*price-value[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
       /class="[^"]*current-price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i,
-      /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/
+      /itemprop="price"[^>]*content="(\d+(?:[.,]\d{2})?)"[^>]*>/,
+      /class="[^"]*price[^"]*"[^>]*>([^<]*?)(?:\s*€|&euro;|EUR)/i
     ];
 
     for (const pattern of pricePatterns) {
@@ -113,7 +106,7 @@ const scrapeWithFetch = async (url: string) => {
         const rawPrice = match[1].replace(/[^\d.,]/g, '');
         const tempPrice = rawPrice.replace(',', '.');
         const numPrice = parseFloat(tempPrice);
-        if (numPrice > 0 && numPrice < 10000) {
+        if (numPrice >= 20 && numPrice < 10000) {
           price = tempPrice;
           break;
         }
