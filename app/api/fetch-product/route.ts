@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer-core';
+import { chromium } from 'playwright';
 
 interface ScrapedData {
   name: string;
@@ -12,53 +12,23 @@ interface ScrapingError extends Error {
   step?: string;
 }
 
-const scrapeWithPuppeteer = async (url: string): Promise<ScrapedData> => {
+const scrapeWithPlaywright = async (url: string): Promise<ScrapedData> => {
   let browser;
   try {
     console.log('Étape 1: Configuration du navigateur');
-    // Configuration spécifique pour Vercel
-    if (process.env.VERCEL) {
-      console.log('Environnement Vercel détecté');
-      
-      browser = await puppeteer.launch({
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--single-process',
-          '--no-zygote',
-          '--hide-scrollbars',
-          '--disable-web-security'
-        ],
-        executablePath: '/var/task/node_modules/puppeteer/.local-chromium/linux-119.0.6045.105/chrome-linux/chrome',
-        headless: true
-      });
-    } else {
-      // Configuration locale
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
-      });
-    }
+    browser = await chromium.launch({
+      args: [
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process',
+        '--no-zygote',
+        '--no-sandbox'
+      ]
+    });
 
     console.log('Étape 2: Création nouvelle page');
-    const page = await browser.newPage();
-    
-    console.log('Étape 3: Configuration des interceptions');
-    await page.setRequestInterception(true);
-    page.on('request', (request) => {
-      if (['image', 'stylesheet', 'font'].includes(request.resourceType())) {
-        request.abort();
-      } else {
-        request.continue();
-      }
-    });
+    const context = await browser.newContext();
+    const page = await context.newPage();
 
     console.log('Étape 4: Navigation vers', url);
     await page.goto(url, { 
@@ -68,7 +38,7 @@ const scrapeWithPuppeteer = async (url: string): Promise<ScrapedData> => {
 
     console.log('Étape 5: Extraction des données');
     const data = await Promise.race([
-      page.evaluate((): ScrapedData => {
+      page.evaluate(() => {
         const name = document.querySelector('h1')?.textContent?.trim() || '';
         const priceElement = document.querySelector('[data-price], .price, .current-price');
         let price = null;
@@ -122,7 +92,7 @@ export async function GET(request: Request) {
 
   try {
     console.log('Démarrage du scraping pour:', url);
-    const data = await scrapeWithPuppeteer(url);
+    const data = await scrapeWithPlaywright(url);
     console.log('Données récupérées avec succès:', data);
     return NextResponse.json(data);
   } catch (error: unknown) {

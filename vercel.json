@@ -5,11 +5,6 @@
       "maxDuration": 10
     }
   },
-  "build": {
-    "env": {
-      "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "false"
-    }
-  },
   "env": {
     "NODE_ENV": "production"
   }
