@@ -4,45 +4,238 @@ import puppeteer from 'puppeteer';
 const scrapeWithPuppeteer = async (url: string) => {
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu',
+      '--window-size=1920x1080'
+    ]
   });
   const page = await browser.newPage();
 
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3');
-  await page.goto(url, { waitUntil: 'networkidle2' });
+  // Configuration plus complète pour simuler un vrai navigateur
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+  await page.setViewport({ width: 1920, height: 1080 });
 
-  const data = await page.evaluate(() => {
-    const h1 = document.querySelector('h1');
-    const name = h1 ? h1.textContent?.trim() : document.title.split('|')[0].trim();
+  try {
+    await page.setDefaultNavigationTimeout(15000);
+    
+    // Stratégie de chargement différente selon le site
+    if (url.includes('conforama')) {
+      // Pour Conforama, on attend juste le chargement initial du DOM
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      // Attendre que le prix soit visible
+      await Promise.race([
+        page.waitForSelector('[data-testid="product-price"]', { timeout: 5000 }),
+        page.waitForSelector('.current-price', { timeout: 5000 }),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+    } else {
+      // Pour les autres sites, on attend que tout soit chargé
+      await page.goto(url, { waitUntil: 'networkidle0' });
+    }
 
-    const images = Array.from(document.querySelectorAll('img'))
-      .filter(img => {
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-        return (
-          width >= 200 && 
-          height >= 200 &&
-          !img.src.includes('logo') &&
-          !img.src.includes('icon') &&
-          !img.src.endsWith('.svg') &&
-          img.src
-        );
-      })
-      .map(img => img.src);
+    const data = await page.evaluate(() => {
+      let name = '';
+      let price = null;
 
-    const priceElement = document.querySelector('.current-price, [data-price], [itemprop="price"], .product-price, .price');
-    const priceText = priceElement?.textContent || '';
-    const priceMatch = priceText.match(/(\d+[.,]?\d*)/);
-    const price = priceMatch ? priceMatch[1].replace(',', '.') : null;
+      // Pour Conforama
+      if (window.location.hostname.includes('conforama')) {
+        // Titre
+        const titleSelectors = [
+          'h1[data-testid="product-title"]',
+          'h1.name',
+          'h1.product-title',
+          'h1'
+        ];
 
-    const descElement = document.querySelector('[itemprop="description"], .description, .product-description, #description');
-    const description = descElement?.textContent?.trim() || null;
+        for (const selector of titleSelectors) {
+          const element = document.querySelector(selector);
+          if (element?.textContent) {
+            name = element.textContent.trim();
+            break;
+          }
+        }
 
-    return { name, images: [...new Set(images)], price, description };
-  });
+        // Prix - essayer plusieurs méthodes pour Conforama
+        const priceSelectors = [
+          'span[data-testid="product-price"]',
+          'span[data-testid="price"]',
+          'div[class*="price"]',
+          'div[class*="Price"]',
+          'span[class*="price"]',
+          'span[class*="Price"]'
+        ];
 
-  await browser.close();
-  return data;
+        for (const selector of priceSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const element of elements) {
+            const priceText = element.textContent?.trim() || '';
+            // Chercher différents formats de prix
+            const patterns = [
+              /(\d+[.,]\d{2})\s*€/,           // 299,99 €
+              /(\d+)[.,](\d{2})/,             // 299,99 ou 299.99
+              /(\d+(?:\s*\d+)*)/              // 299 ou 1 299
+            ];
+
+            for (const pattern of patterns) {
+              const match = priceText.match(pattern);
+              if (match) {
+                let rawPrice;
+                if (match[2]) {
+                  // Si on a capturé les décimales séparément
+                  rawPrice = `${match[1]}.${match[2]}`;
+                } else {
+                  rawPrice = match[1].replace(/\s+/g, '').replace(',', '.');
+                }
+                const numPrice = parseFloat(rawPrice);
+                if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                  price = numPrice;
+                  break;
+                }
+              }
+            }
+            if (price) break;
+          }
+          if (price) break;
+        }
+
+        // Si toujours pas de prix, chercher dans les scripts
+        if (!price) {
+          const scripts = document.querySelectorAll('script[type="application/json"], script:not([src])');
+          for (const script of scripts) {
+            try {
+              const content = script.textContent || '';
+              // Chercher un objet JSON qui pourrait contenir le prix
+              if (content.includes('price') || content.includes('Price')) {
+                const jsonMatch = content.match(/\{[^}]*"price":\s*"?(\d+(?:[.,]\d{2})?)"?[^}]*\}/i);
+                if (jsonMatch) {
+                  const rawPrice = jsonMatch[1].replace(',', '.');
+                  const numPrice = parseFloat(rawPrice);
+                  if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                    price = numPrice;
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Erreur parsing script:', e);
+            }
+          }
+        }
+      } 
+      // Pour Brico Dépôt
+      else if (window.location.hostname.includes('bricodepot')) {
+        // Titre
+        const titleElement = document.querySelector('h1') || document.querySelector('.product-title');
+        name = titleElement?.textContent?.trim() || document.title.split('|')[0].trim();
+
+        // Prix - Essayer plusieurs méthodes
+        const priceSelectors = [
+          '.price-value',
+          '.current-price',
+          '.product-price',
+          '[data-price-value]',
+          '[itemprop="price"]',
+          '.price'
+        ];
+
+        // 1. Chercher dans les attributs data
+        const priceElements = document.querySelectorAll(priceSelectors.join(','));
+        for (const element of priceElements) {
+          // Vérifier les attributs data
+          const dataPrice = element.getAttribute('data-price-value') || 
+                           element.getAttribute('data-price') || 
+                           element.getAttribute('content');
+          
+          if (dataPrice) {
+            const numPrice = parseFloat(dataPrice.replace(',', '.'));
+            if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+              price = numPrice;
+              break;
+            }
+          }
+
+          // Vérifier le texte avec différents patterns
+          const priceText = element.textContent?.trim() || '';
+          const patterns = [
+            /(\d+)\s*€\s*00/,               // Format "299 € 00"
+            /(\d+[.,]\d{2})\s*€/,           // Format "299,99 €"
+            /(\d+(?:\s*\d+)*)/              // Juste les chiffres
+          ];
+
+          for (const pattern of patterns) {
+            const match = priceText.match(pattern);
+            if (match) {
+              const rawPrice = match[1].replace(/\s+/g, '').replace(',', '.');
+              const numPrice = parseFloat(rawPrice);
+              if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                price = numPrice;
+                break;
+              }
+            }
+          }
+          if (price) break;
+        }
+
+        // 2. Si toujours pas de prix, chercher dans tout le HTML pour Brico Dépôt
+        if (!price) {
+          const fullText = document.body.textContent || '';
+          const priceMatch = fullText.match(/(\d+)\s*€\s*00/);
+          if (priceMatch) {
+            const numPrice = parseInt(priceMatch[1]);
+            if (numPrice >= 20 && numPrice < 10000) {
+              price = numPrice;
+            }
+          }
+        }
+      }
+      // Pour les autres sites
+      else {
+        const titleElement = document.querySelector('h1') || document.querySelector('.product-title');
+        name = titleElement?.textContent?.trim() || document.title.split('|')[0].trim();
+
+        const priceElement = document.querySelector('.current-price, [data-price], [itemprop="price"], .product-price, .price');
+        if (priceElement?.textContent) {
+          const priceText = priceElement.textContent.trim();
+          const priceMatch = priceText.match(/(\d+(?:[.,]\d{2})?)/);
+          price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : null;
+        }
+      }
+
+      // Images (uniquement les URLs, sans charger les images)
+      const images = new Set();
+      document.querySelectorAll('img[src]').forEach(img => {
+        const src = (img as HTMLImageElement).src;
+        if (src && 
+            !src.includes('logo') && 
+            !src.includes('icon') && 
+            !src.endsWith('.svg') &&
+            !src.includes('placeholder')) {
+          images.add(src.replace(/\?.*$/, ''));
+        }
+      });
+
+      const descElement = document.querySelector('.product-description, [data-testid="product-description"]');
+      const description = descElement?.textContent?.trim() || null;
+
+      return { 
+        name, 
+        images: Array.from(images), 
+        price: price ? price.toFixed(2) : null, 
+        description
+      };
+    });
+
+    await browser.close();
+    return data;
+  } catch (error) {
+    console.error('Erreur lors du scraping:', error);
+    await browser.close();
+    throw error;
+  }
 };
 
 const scrapeWithFetch = async (url: string) => {
