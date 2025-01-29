@@ -27,9 +27,11 @@ const scrapeWithPuppeteer = async (url: string): Promise<ScrapedData> => {
           '--disable-dev-shm-usage',
           '--disable-gpu',
           '--single-process',
-          '--no-zygote'
+          '--no-zygote',
+          '--hide-scrollbars',
+          '--disable-web-security'
         ],
-        executablePath: process.env.CHROME_BIN || '/usr/bin/chromium-browser',
+        executablePath: '/var/task/node_modules/puppeteer/.local-chromium/linux-119.0.6045.105/chrome-linux/chrome',
         headless: true
       });
     } else {

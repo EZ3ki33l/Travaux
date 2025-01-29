@@ -7,11 +7,10 @@
   },
   "build": {
     "env": {
-      "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
+      "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "false"
     }
   },
   "env": {
-    "CHROME_BIN": "/usr/bin/google-chrome",
     "NODE_ENV": "production"
   }
 } 
