@@ -20,28 +20,18 @@ const scrapeWithPuppeteer = async (url: string): Promise<ScrapedData> => {
     // Configuration spécifique pour Vercel
     if (process.env.VERCEL) {
       console.log('Environnement Vercel détecté');
-      chromium.setGraphicsMode = false;
-      
-      const executablePath = await chromium.executablePath();
-      console.log('Chrome executable path:', executablePath);
       
       browser = await puppeteer.launch({
         args: [
-          ...chromium.args,
-          '--disable-features=AudioServiceOutOfProcess',
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-dev-shm-usage',
           '--no-sandbox',
-          '--disable-setuid-sandbox'
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--single-process',
+          '--no-zygote'
         ],
-        defaultViewport: {
-          width: 1920,
-          height: 1080
-        },
-        executablePath,
-        headless: true,
-        protocolTimeout: 30000
+        executablePath: process.env.CHROME_BIN || '/usr/bin/chromium-browser',
+        headless: true
       });
     } else {
       // Configuration locale
