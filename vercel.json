@@ -1,13 +1,17 @@
 {
   "functions": {
     "app/api/fetch-product/route.ts": {
-      "memory": 3008,
-      "maxDuration": 60
+      "memory": 1024,
+      "maxDuration": 10
     }
   },
   "build": {
     "env": {
       "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
     }
+  },
+  "env": {
+    "PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium-browser",
+    "NODE_ENV": "production"
   }
 } 

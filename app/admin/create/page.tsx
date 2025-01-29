@@ -34,24 +34,19 @@ export default function AdminPage() {
     
     setIsLoading(true);
     try {
-      console.log('Fetching data for URL:', url);
       const response = await fetch(`/api/fetch-product?url=${encodeURIComponent(url)}`);
-      console.log('Response status:', response.status);
       const data = await response.json();
-      console.log('Response data:', data);
 
       if (response.ok && !data.error) {
         const filteredImages = (data.images || []).filter(
           (img: string) => img && (img.startsWith("http") || img.startsWith("data:image"))
         );
-        console.log('Filtered images:', filteredImages);
         setImages(filteredImages);
         setPrice(data.price || "");
         setDescription(data.description || "");
         setName(data.name || "");
         toast.success("Données récupérées avec succès");
       } else {
-        console.error('Error in response:', data.error);
         // Extraire le nom du produit de l'URL
         const urlParts = url.split('/');
         const rawName = urlParts[urlParts.length - 1]
@@ -145,7 +140,7 @@ export default function AdminPage() {
       <AdminNav />
       <div className="p-5 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-6">
-          Crée un article maggle !
+          Créer un article
         </h1>
         <Toaster position="top-right" />
         <div style={{ marginBottom: "20px" }}>
