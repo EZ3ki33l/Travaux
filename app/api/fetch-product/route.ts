@@ -46,6 +46,20 @@ const scrapeWithPuppeteer = async (url: string) => {
       // Attendre un court instant pour laisser le contenu se charger
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
+    // Pour Castorama
+    else if (url.includes('castorama')) {
+      await page.setJavaScriptEnabled(false);
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await page.setJavaScriptEnabled(true);
+      
+      // Attendre que les éléments importants soient chargés
+      await Promise.race([
+        page.waitForSelector('h1[itemprop="name"]', { timeout: 5000 }),
+        page.waitForSelector('span[data-price]', { timeout: 5000 }),
+        page.waitForSelector('.product-description', { timeout: 5000 }),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+    }
     else {
       // Pour les autres sites, on attend que tout soit chargé
       await page.goto(url, { waitUntil: 'networkidle0' });
@@ -57,12 +71,109 @@ const scrapeWithPuppeteer = async (url: string) => {
       throw new Error('Page content not loaded properly');
     }
 
-    const data = await page.evaluate(() => {
+  const data = await page.evaluate(() => {
       let name = '';
       let price = null;
+      let description = null;
+      const images = new Set();
 
+      // Pour Castorama
+      if (window.location.hostname.includes('castorama')) {
+        // Titre
+        const titleElement = document.querySelector('h1[itemprop="name"]') || document.querySelector('h1');
+        name = titleElement?.textContent?.trim() || '';
+
+        // Prix - Essayer plusieurs méthodes
+        const priceSelectors = [
+          'span[data-price]',
+          'span[class*="price"]',
+          'div[class*="price"]',
+          '[itemprop="price"]',
+          '.current-price',
+          '.product-price',
+          '.price-wrapper'
+        ];
+
+        // 1. Chercher dans les attributs data et content
+        for (const selector of priceSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const element of elements) {
+            // Vérifier d'abord les attributs
+            const dataPrice = element.getAttribute('data-price') || 
+                            element.getAttribute('content');
+            
+            if (dataPrice) {
+              const numPrice = parseFloat(dataPrice.replace(',', '.'));
+              if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                price = numPrice;
+                break;
+              }
+            }
+
+            // Sinon vérifier le texte
+            const priceText = element.textContent?.trim() || '';
+            const patterns = [
+              /(\d+[.,]\d{2})\s*€/,           // 299,99 €
+              /(\d+)\s*€\s*(\d{2})/,          // 299 € 99
+              /(\d+(?:\s*\d+)*)[.,](\d{2})/,  // 1 299,99
+              /(\d+(?:\s*\d+)*)/              // 1 299
+            ];
+
+            for (const pattern of patterns) {
+              const match = priceText.match(pattern);
+              if (match) {
+                let rawPrice;
+                if (match[2]) {
+                  // Si on a capturé les décimales
+                  rawPrice = `${match[1].replace(/\s+/g, '')}.${match[2]}`;
+                } else {
+                  rawPrice = match[1].replace(/\s+/g, '').replace(',', '.');
+                }
+                const numPrice = parseFloat(rawPrice);
+                if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                  price = numPrice;
+                  break;
+                }
+              }
+            }
+            if (price) break;
+          }
+          if (price) break;
+        }
+
+        // 2. Si toujours pas de prix, chercher dans les scripts JSON
+        if (!price) {
+          const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const script of scripts) {
+            try {
+              const jsonData = JSON.parse(script.textContent || '');
+              if (jsonData.offers?.price) {
+                const numPrice = parseFloat(jsonData.offers.price);
+                if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                  price = numPrice;
+                  break;
+                }
+              }
+            } catch (e) {
+              console.error('Erreur parsing JSON-LD:', e);
+            }
+          }
+        }
+
+        // Description
+        const descElement = document.querySelector('.product-description');
+        description = descElement?.textContent?.trim() || null;
+
+        // Images
+        document.querySelectorAll('img[src*="product"], img[src*="media"]').forEach(img => {
+          const src = (img as HTMLImageElement).src;
+          if (src && !src.includes('logo') && !src.includes('icon')) {
+            images.add(src.replace(/\?.*$/, ''));
+          }
+        });
+      }
       // Pour Conforama
-      if (window.location.hostname.includes('conforama')) {
+      else if (window.location.hostname.includes('conforama')) {
         // Titre
         const titleSelectors = [
           'h1[data-testid="product-title"]',
@@ -307,7 +418,7 @@ const scrapeWithPuppeteer = async (url: string) => {
         const titleElement = document.querySelector('h1') || document.querySelector('.product-title');
         name = titleElement?.textContent?.trim() || document.title.split('|')[0].trim();
 
-        const priceElement = document.querySelector('.current-price, [data-price], [itemprop="price"], .product-price, .price');
+    const priceElement = document.querySelector('.current-price, [data-price], [itemprop="price"], .product-price, .price');
         if (priceElement?.textContent) {
           const priceText = priceElement.textContent.trim();
           const priceMatch = priceText.match(/(\d+(?:[.,]\d{2})?)/);
@@ -316,7 +427,6 @@ const scrapeWithPuppeteer = async (url: string) => {
       }
 
       // Images (uniquement les URLs, sans charger les images)
-      const images = new Set();
       document.querySelectorAll('img[src]').forEach(img => {
         const src = (img as HTMLImageElement).src;
         if (src && 
@@ -328,19 +438,16 @@ const scrapeWithPuppeteer = async (url: string) => {
         }
       });
 
-      const descElement = document.querySelector('.product-description, [data-testid="product-description"]');
-      const description = descElement?.textContent?.trim() || null;
-
       return { 
         name, 
         images: Array.from(images), 
         price: price ? price.toFixed(2) : null, 
         description
       };
-    });
+  });
 
-    await browser.close();
-    return data;
+  await browser.close();
+  return data;
   } catch (error) {
     console.error('Erreur lors du scraping:', error);
     await browser.close();
@@ -349,9 +456,32 @@ const scrapeWithPuppeteer = async (url: string) => {
 };
 
 const scrapeWithFetch = async (url: string) => {
-  const response = await fetch(url);
-  const html = await response.text();
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1'
+    }
+  });
   
+  if (!response.ok) {
+    console.error('Erreur de réponse:', response.status, response.statusText);
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  const html = await response.text();
+  console.log('HTML reçu:', html.substring(0, 200)); // Log pour debug
+
   // Extraction du titre avec plusieurs patterns
   let name = '';
   const titlePatterns = [
@@ -387,8 +517,54 @@ const scrapeWithFetch = async (url: string) => {
   // Prix avec plusieurs patterns
   let price = null;
   
+  // Pattern spécifique pour Castorama
+  if (url.includes('castorama')) {
+    const pricePatterns = [
+      /(\d+)[.,](\d{2})\s*€\s*<\/span>/,                   // Pour "59,95 €</span>"
+      /(\d+)[.,](\d{2})\s*€(?:\s|&nbsp;)*<\/div>/,        // Pour "59,95 €</div>"
+      /(\d+)[.,](\d{2})\s*€(?:\s|&nbsp;)*\n/,             // Pour "59,95 €\n"
+      /soit\s*(\d+)[.,](\d{2})\s*€/,                      // Pour "soit 53,95 €"
+      /(\d+)[.,](\d{2})\s*€(?:\s|&nbsp;)*\/\s*pc/,       // Pour "53,95 € / pc"
+      /"price":\s*"?(\d+(?:[.,]\d{2})?)"?/                // Format JSON
+    ];
+
+    for (const pattern of pricePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        if (match[2]) {
+          // Si on a capturé les décimales séparément
+          price = `${match[1]}.${match[2]}`;
+        } else {
+          // Si on a capturé le prix complet
+          price = match[1].replace(',', '.');
+        }
+        const numPrice = parseFloat(price);
+        if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+          break;
+        }
+      }
+    }
+
+    // Si toujours pas de prix, chercher dans le JSON-LD
+    if (!price) {
+      const jsonLdMatch = html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/);
+      if (jsonLdMatch) {
+        try {
+          const jsonData = JSON.parse(jsonLdMatch[1]);
+          if (jsonData.offers?.price) {
+            const numPrice = parseFloat(jsonData.offers.price);
+            if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+              price = numPrice.toString();
+            }
+          }
+        } catch (e) {
+          console.error('Erreur parsing JSON-LD:', e);
+        }
+      }
+    }
+  }
   // Pattern spécifique pour Brico Dépôt
-  if (url.includes('bricodepot')) {
+  else if (url.includes('bricodepot')) {
     const priceMatch = html.match(/(\d+)\s*(?:€|&euro;)\s*00/);
     if (priceMatch) {
       const num = parseInt(priceMatch[1]);
@@ -485,10 +661,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = process.env.VERCEL 
-      ? await scrapeWithFetch(url)
-      : await scrapeWithPuppeteer(url);
-
+    // Toujours utiliser Puppeteer car fetch ne peut pas contourner Cloudflare
+    const data = await scrapeWithPuppeteer(url);
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching data:', error);
