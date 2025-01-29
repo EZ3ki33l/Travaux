@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min';
 
 interface ScrapedData {
   name: string;
