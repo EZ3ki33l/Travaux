@@ -455,35 +455,6 @@ const scrapeWithPuppeteer = async (url: string) => {
   }
 };
 
-// Fonction pour nettoyer le HTML
-function cleanHTML(text: string) {
-  return text
-    .replace(/<[^>]+>/g, '') // Supprime les balises HTML
-    .replace(/\s+/g, ' ')    // Normalise les espaces
-    .trim();
-}
-
-// Fonction pour décoder les entités HTML
-function decodeHTMLEntities(text: string) {
-  const entities: { [key: string]: string } = {
-    '&lt;': '<',
-    '&gt;': '>',
-    '&amp;': '&',
-    '&quot;': '"',
-    '&#034;': '"',
-    '&#039;': "'",
-    '&eacute;': 'é',
-    '&egrave;': 'è',
-    '&agrave;': 'à',
-    '&ecirc;': 'ê',
-    '&ccedil;': 'ç',
-  };
-  
-  return text
-    .replace(/&[^;]+;/g, (entity) => entities[entity] || '')
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec)));
-}
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get('url');
