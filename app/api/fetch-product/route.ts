@@ -1,26 +1,33 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium-min';
+import puppeteer from 'puppeteer-core';
 
 const scrapeWithPuppeteer = async (url: string) => {
+  console.log('Launching browser...');
+  
+  const executablePath = await chromium.executablePath();
+
   const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--disable-gpu',
-      '--window-size=1920x1080'
-    ]
-  });
+    args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+    defaultViewport: chromium.defaultViewport,
+    executablePath: executablePath,
+    headless: chromium.headless,
+    ignoreHTTPSErrors: true,
+  } as any); // Type assertion nécessaire pour les options spécifiques à Vercel
+
+  console.log('Browser launched successfully');
+
   const page = await browser.newPage();
+  console.log('New page created');
 
   // Configuration plus complète pour simuler un vrai navigateur
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
   await page.setViewport({ width: 1920, height: 1080 });
+  console.log('Browser configuration set');
 
   try {
     await page.setDefaultNavigationTimeout(30000);
+    console.log('Starting navigation to URL:', url);
     
     // Stratégie de chargement différente selon le site
     if (url.includes('conforama')) {
@@ -48,17 +55,22 @@ const scrapeWithPuppeteer = async (url: string) => {
     }
     // Pour Castorama
     else if (url.includes('castorama')) {
+      console.log('Detected Castorama site');
       await page.setJavaScriptEnabled(false);
+      console.log('JavaScript disabled');
       await page.goto(url, { waitUntil: 'domcontentloaded' });
+      console.log('Page loaded with JS disabled');
       await page.setJavaScriptEnabled(true);
+      console.log('JavaScript re-enabled');
       
-      // Attendre que les éléments importants soient chargés
+      console.log('Waiting for important elements...');
       await Promise.race([
         page.waitForSelector('h1[itemprop="name"]', { timeout: 5000 }),
         page.waitForSelector('span[data-price]', { timeout: 5000 }),
         page.waitForSelector('.product-description', { timeout: 5000 }),
         new Promise(resolve => setTimeout(resolve, 5000))
       ]);
+      console.log('Elements loaded or timeout reached');
     }
     else {
       // Pour les autres sites, on attend que tout soit chargé
@@ -459,15 +471,23 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get('url');
 
+  console.log('API called with URL:', url);
+
   if (!url) {
+    console.error('No URL provided');
     return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   }
 
   try {
+    console.log('Starting scraping with Puppeteer...');
     const data = await scrapeWithPuppeteer(url);
+    console.log('Scraping successful:', data);
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching data:', error);
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+    console.error('Error in scraping:', error);
+    return NextResponse.json({ 
+      error: 'Failed to fetch data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
