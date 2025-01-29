@@ -1,25 +1,35 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium-min';
 
 const scrapeWithPuppeteer = async (url: string) => {
-  const browser = await puppeteer.launch({
+  let browser;
+  try {
+    // Configuration spécifique pour Vercel
+    if (process.env.VERCEL) {
+      chromium.setGraphicsMode = false;
+      
+      const executablePath = await chromium.executablePath();
+      
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath,
+        headless: "shell"
+      });
+    } else {
+      // Configuration locale
+      browser = await puppeteer.launch({
         headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--single-process',
-          '--no-zygote',
-          '--disable-extensions',
-          '--js-flags="--max-old-space-size=512"'
-        ],
-    ...(process.env.VERCEL ? {
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'chrome'
-    } : {})
-  });
-  
-  try {
+          '--disable-gpu'
+        ]
+      });
+    }
+
     const page = await browser.newPage();
     
     // Optimisations pour réduire l'utilisation de la mémoire
@@ -34,7 +44,7 @@ const scrapeWithPuppeteer = async (url: string) => {
 
     // Configuration minimale du navigateur
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    await page.setDefaultNavigationTimeout(10000); // 10 secondes max
+    await page.setDefaultNavigationTimeout(10000);
 
     // Chargement optimisé de la page
     await page.goto(url, { 
@@ -52,25 +62,28 @@ const scrapeWithPuppeteer = async (url: string) => {
         if (priceElement) {
           const priceText = priceElement.textContent || '';
           const match = priceText.match(/(\d+[.,]\d{2})/);
-                if (match) {
+          if (match) {
             price = parseFloat(match[1].replace(',', '.'));
           }
         }
 
-  return { 
-    name, 
-        price: price ? price.toFixed(2) : null, 
+        return { 
+          name, 
+          price: price ? price.toFixed(2) : null, 
           images: [],
           description: null
-  };
+        };
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
     ]);
 
-  await browser.close();
-  return data;
-  } catch (error) {
     await browser.close();
+    return data;
+  } catch (error) {
+    if (browser) {
+      await browser.close();
+    }
+    console.error('Erreur détaillée:', error);
     throw error;
   }
 };
