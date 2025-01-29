@@ -20,7 +20,7 @@ const scrapeWithPuppeteer = async (url: string) => {
   await page.setViewport({ width: 1920, height: 1080 });
 
   try {
-    await page.setDefaultNavigationTimeout(15000);
+    await page.setDefaultNavigationTimeout(30000);
     
     // Stratégie de chargement différente selon le site
     if (url.includes('conforama')) {
@@ -32,9 +32,29 @@ const scrapeWithPuppeteer = async (url: string) => {
         page.waitForSelector('.current-price', { timeout: 5000 }),
         new Promise(resolve => setTimeout(resolve, 5000))
       ]);
-    } else {
+    } 
+    // Pour Leroy Merlin
+    else if (url.includes('leroymerlin')) {
+      // Désactiver JavaScript pour éviter les problèmes de message channel
+      await page.setJavaScriptEnabled(false);
+      
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      
+      // Réactiver JavaScript après le chargement initial
+      await page.setJavaScriptEnabled(true);
+      
+      // Attendre un court instant pour laisser le contenu se charger
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    else {
       // Pour les autres sites, on attend que tout soit chargé
       await page.goto(url, { waitUntil: 'networkidle0' });
+    }
+
+    // Vérifier si la page est bien chargée
+    const content = await page.content();
+    if (!content || content.length < 100) {
+      throw new Error('Page content not loaded properly');
     }
 
     const data = await page.evaluate(() => {
@@ -188,6 +208,96 @@ const scrapeWithPuppeteer = async (url: string) => {
             const numPrice = parseInt(priceMatch[1]);
             if (numPrice >= 20 && numPrice < 10000) {
               price = numPrice;
+            }
+          }
+        }
+      }
+      // Pour Leroy Merlin
+      else if (window.location.hostname.includes('leroymerlin')) {
+        // Titre
+        const titleSelectors = [
+          'h1[data-tracking="product-page-title"]',
+          'h1.product-title',
+          'h1[class*="title"]',
+          'h1'
+        ];
+
+        for (const selector of titleSelectors) {
+          const element = document.querySelector(selector);
+          if (element?.textContent) {
+            name = element.textContent.trim();
+            break;
+          }
+        }
+
+        // Prix
+        const priceSelectors = [
+          '[data-tracking="product-page-price"]',
+          'span[class*="price-integer"]',
+          'div[class*="main-price"]',
+          'div[class*="product-price"]',
+          '[itemprop="price"]',
+          'span[class*="price"]'
+        ];
+
+        for (const selector of priceSelectors) {
+          const element = document.querySelector(selector);
+          if (element) {
+            // Vérifier d'abord les attributs
+            const contentPrice = element.getAttribute('content');
+            if (contentPrice) {
+              const numPrice = parseFloat(contentPrice);
+              if (!isNaN(numPrice) && numPrice > 0) {
+                price = numPrice;
+                break;
+              }
+            }
+
+            // Sinon vérifier le texte
+            const priceText = element.textContent?.trim() || '';
+            const patterns = [
+              /(\d+)[.,](\d{2})\s*€/,         // 299,99 €
+              /(\d+)\s*€\s*(\d{2})/,          // 299 € 99
+              /(\d+(?:\s*\d+)*)[.,](\d{2})/,  // 1 299,99
+              /(\d+(?:\s*\d+)*)/              // 1 299
+            ];
+
+            for (const pattern of patterns) {
+              const match = priceText.match(pattern);
+              if (match) {
+                let rawPrice;
+                if (match[2]) {
+                  // Si on a capturé les décimales
+                  rawPrice = `${match[1].replace(/\s+/g, '')}.${match[2]}`;
+                } else {
+                  rawPrice = match[1].replace(/\s+/g, '');
+                }
+                const numPrice = parseFloat(rawPrice);
+                if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                  price = numPrice;
+                  break;
+                }
+              }
+            }
+          }
+          if (price) break;
+        }
+
+        // Si toujours pas de prix, chercher dans les scripts
+        if (!price) {
+          const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const script of scripts) {
+            try {
+              const jsonData = JSON.parse(script.textContent || '');
+              if (jsonData.offers?.price) {
+                const numPrice = parseFloat(jsonData.offers.price);
+                if (!isNaN(numPrice) && numPrice > 0 && numPrice < 10000) {
+                  price = numPrice;
+                  break;
+                }
+              }
+            } catch (e) {
+              console.error('Erreur parsing JSON-LD:', e);
             }
           }
         }

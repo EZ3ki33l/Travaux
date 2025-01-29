@@ -32,28 +32,6 @@ export default function AdminPage() {
     setDescription("");
     setRenderKey(prev => prev + 1);
     
-    // Si c'est Leroy Merlin, traiter différemment
-    if (url.includes('leroymerlin')) {
-      // Extraire et nettoyer le nom du produit de l'URL
-      const urlParts = url.split('/');
-      const rawName = urlParts[urlParts.length - 1]
-        .split('#')[0] // Enlever tout ce qui suit le #
-        .replace(/-/g, ' ')
-        .replace(/\d+\.html$/, '') // Enlever le numéro et .html à la fin
-        .replace(/\d+$/, '') // Enlever tout numéro à la fin
-        .trim()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitaliser chaque mot
-        .join(' ');
-      setName(rawName);
-      toast("Veuillez saisir les informations manuellement", {
-        icon: '📝',
-        duration: 4000
-      });
-      return;
-    }
-
-    // Pour les autres sites
     setIsLoading(true);
     try {
       const response = await fetch(`/api/fetch-product?url=${encodeURIComponent(url)}`);
@@ -69,7 +47,7 @@ export default function AdminPage() {
         setName(data.name || "");
         toast.success("Données récupérées avec succès");
       } else {
-        // Extraire le nom du produit de l'URL comme pour Leroy Merlin
+        // Extraire le nom du produit de l'URL
         const urlParts = url.split('/');
         const rawName = urlParts[urlParts.length - 1]
           .split('#')[0]
