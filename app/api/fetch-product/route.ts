@@ -2,7 +2,18 @@ import { NextResponse } from 'next/server';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium-min';
 
-const scrapeWithPuppeteer = async (url: string) => {
+interface ScrapedData {
+  name: string;
+  price: string | null;
+  images: string[];
+  description: string | null;
+}
+
+interface ScrapingError extends Error {
+  step?: string;
+}
+
+const scrapeWithPuppeteer = async (url: string): Promise<ScrapedData> => {
   let browser;
   try {
     console.log('Étape 1: Configuration du navigateur');
@@ -66,7 +77,7 @@ const scrapeWithPuppeteer = async (url: string) => {
 
     console.log('Étape 5: Extraction des données');
     const data = await Promise.race([
-      page.evaluate(() => {
+      page.evaluate((): ScrapedData => {
         const name = document.querySelector('h1')?.textContent?.trim() || '';
         const priceElement = document.querySelector('[data-price], .price, .current-price');
         let price = null;
@@ -75,28 +86,29 @@ const scrapeWithPuppeteer = async (url: string) => {
           const priceText = priceElement.textContent || '';
           const match = priceText.match(/(\d+[.,]\d{2})/);
           if (match) {
-            price = parseFloat(match[1].replace(',', '.'));
+            price = parseFloat(match[1].replace(',', '.')).toFixed(2);
           }
         }
 
         return { 
           name, 
-          price: price ? price.toFixed(2) : null, 
+          price, 
           images: [],
           description: null
         };
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout pendant l\'extraction des données')), 5000))
-    ]);
+    ]) as ScrapedData;
 
     console.log('Étape 6: Fermeture du navigateur');
     await browser.close();
     return data;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const scrapingError = error as ScrapingError;
     console.error('Erreur pendant le scraping:', {
-      step: error.message.includes('Timeout') ? 'Extraction des données' : 'Configuration du navigateur',
-      message: error.message,
-      stack: error.stack
+      step: scrapingError.message?.includes('Timeout') ? 'Extraction des données' : 'Configuration du navigateur',
+      message: scrapingError.message,
+      stack: scrapingError.stack
     });
     if (browser) {
       try {
@@ -105,7 +117,7 @@ const scrapeWithPuppeteer = async (url: string) => {
         console.error('Erreur lors de la fermeture du navigateur:', closeError);
       }
     }
-    throw error;
+    throw scrapingError;
   }
 };
 
@@ -122,16 +134,17 @@ export async function GET(request: Request) {
     const data = await scrapeWithPuppeteer(url);
     console.log('Données récupérées avec succès:', data);
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const apiError = error as Error;
     console.error('Erreur complète:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
+      message: apiError.message,
+      stack: apiError.stack,
+      name: apiError.name
     });
     return NextResponse.json({ 
       error: 'Failed to fetch data',
-      details: error.message,
-      type: error.name
+      details: apiError.message,
+      type: apiError.name
     }, { status: 500 });
   }
 }
