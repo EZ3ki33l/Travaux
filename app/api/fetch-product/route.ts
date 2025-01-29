@@ -5,9 +5,10 @@ import chromium from '@sparticuz/chromium-min';
 const scrapeWithPuppeteer = async (url: string) => {
   let browser;
   try {
+    console.log('Étape 1: Configuration du navigateur');
     // Configuration spécifique pour Vercel
     if (process.env.VERCEL) {
-      console.log('Initialisation de Chrome sur Vercel...');
+      console.log('Environnement Vercel détecté');
       chromium.setGraphicsMode = false;
       
       const executablePath = await chromium.executablePath();
@@ -31,7 +32,6 @@ const scrapeWithPuppeteer = async (url: string) => {
         headless: true,
         protocolTimeout: 30000
       });
-      console.log('Chrome lancé avec succès');
     } else {
       // Configuration locale
       browser = await puppeteer.launch({
@@ -45,9 +45,10 @@ const scrapeWithPuppeteer = async (url: string) => {
       });
     }
 
+    console.log('Étape 2: Création nouvelle page');
     const page = await browser.newPage();
     
-    // Optimisations pour réduire l'utilisation de la mémoire
+    console.log('Étape 3: Configuration des interceptions');
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       if (['image', 'stylesheet', 'font'].includes(request.resourceType())) {
@@ -57,17 +58,13 @@ const scrapeWithPuppeteer = async (url: string) => {
       }
     });
 
-    // Configuration minimale du navigateur
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    await page.setDefaultNavigationTimeout(10000);
-
-    // Chargement optimisé de la page
+    console.log('Étape 4: Navigation vers', url);
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
       timeout: 8000
     });
 
-    // Extraction des données avec un timeout réduit
+    console.log('Étape 5: Extraction des données');
     const data = await Promise.race([
       page.evaluate(() => {
         const name = document.querySelector('h1')?.textContent?.trim() || '';
@@ -89,16 +86,25 @@ const scrapeWithPuppeteer = async (url: string) => {
           description: null
         };
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout pendant l\'extraction des données')), 5000))
     ]);
 
+    console.log('Étape 6: Fermeture du navigateur');
     await browser.close();
     return data;
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Erreur pendant le scraping:', {
+      step: error.message.includes('Timeout') ? 'Extraction des données' : 'Configuration du navigateur',
+      message: error.message,
+      stack: error.stack
+    });
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('Erreur lors de la fermeture du navigateur:', closeError);
+      }
     }
-    console.error('Erreur détaillée:', error);
     throw error;
   }
 };
@@ -112,10 +118,20 @@ export async function GET(request: Request) {
   }
 
   try {
+    console.log('Démarrage du scraping pour:', url);
     const data = await scrapeWithPuppeteer(url);
+    console.log('Données récupérées avec succès:', data);
     return NextResponse.json(data);
-  } catch (error) {
-    console.error('Error fetching data:', error);
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Erreur complète:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    return NextResponse.json({ 
+      error: 'Failed to fetch data',
+      details: error.message,
+      type: error.name
+    }, { status: 500 });
   }
 }

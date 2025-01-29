@@ -140,7 +140,7 @@ export default function AdminPage() {
       <AdminNav />
       <div className="p-5 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-6">
-          Créer un article
+          Créer un article (test)
         </h1>
         <Toaster position="top-right" />
         <div style={{ marginBottom: "20px" }}>
